@@ -369,7 +369,7 @@ async function loadData() {
     renderEmpSelect(); renderProducts();
   } catch(err) {
     showToast('❌ Erreur chargement : '+err.message,'error');
-    document.getElementById('plist').innerHTML = '<div class="empty">Impossible de charger les produits.<br>Vérifie l'URL dans Admin.</div>';
+    document.getElementById('plist').innerHTML = '<div class="empty">Impossible de charger les produits.<br>Vérifie l URL dans Admin.</div>';
   }
 }
 

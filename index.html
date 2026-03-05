@@ -596,7 +596,7 @@ function resetForm() {
 async function loadHistory() {
   const list=document.getElementById('hlist');
   const url=S.scriptUrl;
-  if(!url||url==='COLLE_TON_URL_ICI'){list.innerHTML='<div class="empty">Configure l'URL Google Sheets dans Admin.</div>';return}
+  if(!url||url==='COLLE_TON_URL_ICI'){list.innerHTML='<div class="empty">Configure l URL Google Sheets dans Admin.</div>';return}
   list.innerHTML='<div class="loader"><div class="ldots"><span></span><span></span><span></span></div> Chargement...</div>';
   try {
     const res=await fetch(url+'?action=fiches');

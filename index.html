@@ -98,6 +98,29 @@ textarea:focus{border-color:var(--or);box-shadow:0 0 0 3px rgba(201,168,76,.1)}
   margin-bottom:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pcard-del{display:flex;justify-content:flex-end;padding:0 10px 8px}
 
+/* ── TARTES ── */
+.tarte-name-row td{padding:10px 12px 4px!important;border-radius:9px 9px 0 0!important;background:rgba(201,168,76,.05)!important}
+.tarte-name-wrap{display:flex;align-items:center;justify-content:space-between}
+.tarte-variant-row td{background:rgba(201,168,76,.03)!important;border-top:1px dashed rgba(201,168,76,.1)}
+.tarte-variant-row.has-val{background:rgba(201,168,76,.07)!important}
+.parts-select{width:auto!important;padding:5px 28px 5px 8px!important;font-size:12px!important;
+  color:var(--or2)!important;border-color:rgba(201,168,76,.3)!important;font-weight:bold}
+.btnadd-sm{padding:4px 10px;font-size:11px;background:rgba(201,168,76,.1);color:var(--or2);
+  border:1px solid rgba(201,168,76,.2);border-radius:7px;font-family:'Georgia',serif;cursor:pointer}
+.btnadd-sm:hover{background:rgba(201,168,76,.2)}
+.tarte-card{background:var(--noir3);border-radius:10px;border:1px solid rgba(201,168,76,.2);
+  margin-bottom:8px;overflow:hidden}
+.tarte-card-header{display:flex;align-items:center;justify-content:space-between;
+  padding:10px 12px 8px;border-bottom:1px solid rgba(255,255,255,.05);
+  background:rgba(201,168,76,.05)}
+.tarte-card-name{font-size:14px;color:var(--or2);font-style:italic}
+.tarte-variant-card{border-top:1px dashed rgba(201,168,76,.12);padding:10px 12px}
+.tarte-variant-card.has-val{background:rgba(201,168,76,.03)}
+.tarte-vhead{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.tarte-vtotal-wrap .tlabel{font-size:9px;letter-spacing:1px;text-transform:uppercase;
+  color:rgba(201,168,76,.5);font-family:'Courier New',monospace;text-align:right}
+.tarte-vtotal-wrap .tval{font-size:20px;font-weight:bold;color:var(--or2);line-height:1;text-align:right}
+
 /* Input numérique */
 .col-input{width:100%;padding:7px 4px;border:1px solid rgba(201,168,76,.15);border-radius:7px;
   background:var(--noir2);color:var(--blanc);font-family:'Georgia',serif;
@@ -389,6 +412,47 @@ textarea:focus{border-color:var(--or);box-shadow:0 0 0 3px rgba(201,168,76,.1)}
 <script>
 const S = { employes:[], produits:[], colonnes:[], scriptUrl:'', adminPwd:null };
 let allFiches=[], nextId=1;
+const tarteVariants={}; // { pid: [4,6,...] }
+const PARTS_OPTS=[4,6,8,10,12];
+function isTarte(p){return p.categorie&&p.categorie.toLowerCase().includes('tarte');}
+function initTarteVariants(){
+  S.produits.forEach(p=>{if(isTarte(p)&&!tarteVariants[p.id])tarteVariants[p.id]=[4];});
+}
+function addTarteVariant(pid){
+  if(!tarteVariants[pid])tarteVariants[pid]=[];
+  const used=tarteVariants[pid];
+  const next=PARTS_OPTS.find(n=>!used.includes(n));
+  if(next===undefined){showToast('Toutes les tailles déjà présentes','error');return;}
+  tarteVariants[pid].push(next); renderProducts();
+}
+function removeTarteVariant(pid,parts){
+  if(!tarteVariants[pid]||tarteVariants[pid].length<=1){showToast('Garder au moins une taille','error');return;}
+  tarteVariants[pid]=tarteVariants[pid].filter(p=>p!==parts); renderProducts();
+}
+function changeTarteParts(pid,oldParts,newVal){
+  const np=parseInt(newVal);
+  if(tarteVariants[pid]&&tarteVariants[pid].includes(np)&&np!==oldParts){showToast('Cette taille existe déjà','error');renderProducts();return;}
+  const idx=tarteVariants[pid]?tarteVariants[pid].indexOf(oldParts):-1;
+  if(idx>=0)tarteVariants[pid][idx]=np;
+  renderProducts();
+}
+function updateTarteTotal(pid,parts){
+  const inputs=document.querySelectorAll(`[data-pid="${pid}"][data-parts="${parts}"]`);
+  const vals={};
+  inputs.forEach(inp=>{
+    const c=decodeURIComponent(inp.dataset.col);
+    vals[c]=Math.max(vals[c]||0,parseInt(inp.value)||0);
+  });
+  inputs.forEach(inp=>{inp.value=vals[decodeURIComponent(inp.dataset.col)]||0;});
+  const total=Object.values(vals).reduce((a,b)=>a+b,0);
+  const tt=document.getElementById(`ttotal-${pid}-${parts}`);
+  const ct=document.getElementById(`ctotal-${pid}-${parts}`);
+  if(tt)tt.textContent=total; if(ct)ct.textContent=total;
+  const tr=document.getElementById(`trow-${pid}-${parts}`);
+  const cr=document.getElementById(`crow-${pid}-${parts}`);
+  if(tr)tr.classList.toggle('has-val',total>0);
+  if(cr)cr.classList.toggle('has-val',total>0);
+}
 
 // ══ INIT ══
 async function init() {
@@ -456,37 +520,69 @@ function renderEmpSelect() {
 function renderProducts() {
   const list=document.getElementById('plist');
   if(!S.produits.length){list.innerHTML='<div class="empty">Aucun produit</div>';return}
+  initTarteVariants();
 
   const cats={};
   S.produits.forEach(p=>{if(!cats[p.categorie])cats[p.categorie]=[];cats[p.categorie].push(p);});
-
   let html='';
+  const thCols=S.colonnes.map(c=>`<th>${c}</th>`).join('');
+  const nCols=S.colonnes.length;
 
   // ── VERSION TABLE (≥600px) ──
-  const thCols=S.colonnes.map(c=>`<th>${c}</th>`).join('');
   html+=`<div class="desktop-only"><div class="tbl-wrap">`;
-
   Object.entries(cats).forEach(([cat,prods])=>{
     html+=`<div class="cat-sep">${cat}</div>
     <table class="prod-table">
       <thead><tr>
-        <th style="text-align:left">Produit</th>
-        ${thCols}
-        <th>Total</th>
-        <th></th>
+        <th style="text-align:left">Produit / Taille</th>
+        ${thCols}<th>Total</th><th></th>
       </tr></thead><tbody>`;
+
     prods.forEach(p=>{
-      const inputs=S.colonnes.map(c=>
-        `<td><input class="col-input" type="number" min="0" value="0"
-          data-pid="${p.id}" data-col="${encodeURIComponent(c)}"
-          oninput="updateTotal(${p.id})" onchange="updateTotal(${p.id})"/></td>`
-      ).join('');
-      html+=`<tr id="trow-${p.id}">
-        <td><div class="pname-t">${p.nom}</div></td>
-        ${inputs}
-        <td class="total-td" id="ttotal-${p.id}">0</td>
-        <td><button class="delbtn" onclick="delProd(${p.id})">✕</button></td>
-      </tr>`;
+      if(isTarte(p)){
+        // Ligne nom + bouton ajouter
+        html+=`<tr class="tarte-name-row">
+          <td colspan="${nCols+3}" style="padding:8px 12px 4px;background:rgba(201,168,76,.05);border-radius:8px 8px 0 0">
+            <div class="tarte-name-wrap">
+              <span class="pname-t" style="color:var(--or2);font-style:italic">🥧 ${p.nom}</span>
+              <div style="display:flex;gap:6px;align-items:center">
+                <button class="btnadd-sm" onclick="addTarteVariant(${p.id})">+ Taille</button>
+                <button class="delbtn" onclick="delProd(${p.id})" title="Retirer ce produit">✕</button>
+              </div>
+            </div>
+          </td>
+        </tr>`;
+        // Lignes variantes
+        (tarteVariants[p.id]||[4]).forEach(parts=>{
+          const partsOpts=PARTS_OPTS.map(n=>`<option value="${n}" ${n===parts?'selected':''}>${n} parts</option>`).join('');
+          const inputs=S.colonnes.map(c=>
+            `<td><input class="col-input" type="number" min="0" value="0"
+              data-pid="${p.id}" data-parts="${parts}" data-col="${encodeURIComponent(c)}"
+              oninput="updateTarteTotal(${p.id},${parts})" onchange="updateTarteTotal(${p.id},${parts})"/></td>`
+          ).join('');
+          html+=`<tr class="tarte-variant-row" id="trow-${p.id}-${parts}">
+            <td style="padding-left:14px">
+              <select class="col-input parts-select" onchange="changeTarteParts(${p.id},${parts},this.value)">${partsOpts}</select>
+            </td>
+            ${inputs}
+            <td class="total-td" id="ttotal-${p.id}-${parts}">0</td>
+            <td><button class="delbtn" onclick="removeTarteVariant(${p.id},${parts})" title="Retirer cette taille">−</button></td>
+          </tr>`;
+        });
+      } else {
+        // Produit normal
+        const inputs=S.colonnes.map(c=>
+          `<td><input class="col-input" type="number" min="0" value="0"
+            data-pid="${p.id}" data-col="${encodeURIComponent(c)}"
+            oninput="updateTotal(${p.id})" onchange="updateTotal(${p.id})"/></td>`
+        ).join('');
+        html+=`<tr id="trow-${p.id}">
+          <td><div class="pname-t">${p.nom}</div></td>
+          ${inputs}
+          <td class="total-td" id="ttotal-${p.id}">0</td>
+          <td><button class="delbtn" onclick="delProd(${p.id})">✕</button></td>
+        </tr>`;
+      }
     });
     html+=`</tbody></table>`;
   });
@@ -497,30 +593,64 @@ function renderProducts() {
   Object.entries(cats).forEach(([cat,prods])=>{
     html+=`<div class="cat-sep">${cat}</div>`;
     prods.forEach(p=>{
-      const cardCols=S.colonnes.map(c=>`
-        <div class="pcard-col">
-          <div class="clabel">${c}</div>
-          <input class="col-input" type="number" min="0" value="0"
-            data-pid="${p.id}" data-col="${encodeURIComponent(c)}"
-            oninput="updateTotal(${p.id})" onchange="updateTotal(${p.id})"/>
-        </div>`).join('');
-      html+=`<div class="prow-card" id="crow-${p.id}">
-        <div class="pcard-head">
-          <div><div class="pcard-name">${p.nom}</div></div>
-          <div class="pcard-total-wrap">
-            <div class="tlabel">Total prod</div>
-            <div class="tval" id="ctotal-${p.id}">0</div>
+      if(isTarte(p)){
+        const variants=(tarteVariants[p.id]||[4]);
+        const variantHtml=variants.map(parts=>{
+          const partsOpts=PARTS_OPTS.map(n=>`<option value="${n}" ${n===parts?'selected':''}>${n} parts</option>`).join('');
+          const cardCols=S.colonnes.map(c=>`
+            <div class="pcard-col">
+              <div class="clabel">${c}</div>
+              <input class="col-input" type="number" min="0" value="0"
+                data-pid="${p.id}" data-parts="${parts}" data-col="${encodeURIComponent(c)}"
+                oninput="updateTarteTotal(${p.id},${parts})" onchange="updateTarteTotal(${p.id},${parts})"/>
+            </div>`).join('');
+          return `<div class="tarte-variant-card" id="crow-${p.id}-${parts}">
+            <div class="tarte-vhead">
+              <select class="col-input parts-select" style="width:auto" onchange="changeTarteParts(${p.id},${parts},this.value)">${partsOpts}</select>
+              <div class="tarte-vtotal-wrap">
+                <div class="tlabel">Total</div>
+                <div class="tval" id="ctotal-${p.id}-${parts}">0</div>
+              </div>
+            </div>
+            <div class="pcard-cols">${cardCols}</div>
+            ${variants.length>1?`<div style="text-align:right;padding-bottom:4px"><button class="delbtn" style="color:var(--gris2);font-size:11px" onclick="removeTarteVariant(${p.id},${parts})">− Retirer cette taille</button></div>`:''}
+          </div>`;
+        }).join('');
+        html+=`<div class="tarte-card">
+          <div class="tarte-card-header">
+            <span class="tarte-card-name">🥧 ${p.nom}</span>
+            <div style="display:flex;gap:6px">
+              <button class="btnadd-sm" onclick="addTarteVariant(${p.id})">+ Taille</button>
+              <button class="delbtn" onclick="delProd(${p.id})">✕</button>
+            </div>
           </div>
-        </div>
-        <div class="pcard-cols">${cardCols}</div>
-        <div class="pcard-del">
-          <button class="delbtn" style="color:var(--gris2)" onclick="delProd(${p.id})">✕ Retirer</button>
-        </div>
-      </div>`;
+          ${variantHtml}
+        </div>`;
+      } else {
+        const cardCols=S.colonnes.map(c=>`
+          <div class="pcard-col">
+            <div class="clabel">${c}</div>
+            <input class="col-input" type="number" min="0" value="0"
+              data-pid="${p.id}" data-col="${encodeURIComponent(c)}"
+              oninput="updateTotal(${p.id})" onchange="updateTotal(${p.id})"/>
+          </div>`).join('');
+        html+=`<div class="prow-card" id="crow-${p.id}">
+          <div class="pcard-head">
+            <div><div class="pcard-name">${p.nom}</div></div>
+            <div class="pcard-total-wrap">
+              <div class="tlabel">Total prod</div>
+              <div class="tval" id="ctotal-${p.id}">0</div>
+            </div>
+          </div>
+          <div class="pcard-cols">${cardCols}</div>
+          <div class="pcard-del">
+            <button class="delbtn" style="color:var(--gris2)" onclick="delProd(${p.id})">✕ Retirer</button>
+          </div>
+        </div>`;
+      }
     });
   });
   html+=`</div>`;
-
   list.innerHTML=html;
 }
 
@@ -554,28 +684,38 @@ function updateTotal(pid) {
   if(cr) cr.classList.toggle('has-val',total>0);
 }
 
-// ── Lit toutes les valeurs depuis le DOM au moment du submit ──
+// ── Lit toutes les valeurs depuis le DOM — retourne un tableau plat d'entrées ──
 function readValuesFromDOM() {
-  const result = {};
-  S.produits.forEach(p => {
-    const vals = {};
-    let total = 0;
-    S.colonnes.forEach(c => {
-      // Chercher un input visible (pas forcément dans display:none)
-      const inputs = document.querySelectorAll(`[data-pid="${p.id}"][data-col="${encodeURIComponent(c)}"]`);
-      let val = 0;
-      inputs.forEach(inp => { val = Math.max(val, parseInt(inp.value)||0); });
-      vals[c] = val;
-      total += val;
-    });
-    result[p.id] = { valeurs: vals, total };
+  const entries=[];
+  S.produits.forEach(p=>{
+    if(isTarte(p)){
+      (tarteVariants[p.id]||[]).forEach(parts=>{
+        const vals={};let total=0;
+        S.colonnes.forEach(c=>{
+          const inputs=document.querySelectorAll(`[data-pid="${p.id}"][data-parts="${parts}"][data-col="${encodeURIComponent(c)}"]`);
+          let val=0;inputs.forEach(inp=>{val=Math.max(val,parseInt(inp.value)||0);});
+          vals[c]=val;total+=val;
+        });
+        entries.push({nom:`${p.nom} — ${parts} parts`,categorie:p.categorie,valeurs:vals,total});
+      });
+    } else {
+      const vals={};let total=0;
+      S.colonnes.forEach(c=>{
+        const inputs=document.querySelectorAll(`[data-pid="${p.id}"][data-col="${encodeURIComponent(c)}"]`);
+        let val=0;inputs.forEach(inp=>{val=Math.max(val,parseInt(inp.value)||0);});
+        vals[c]=val;total+=val;
+      });
+      entries.push({nom:p.nom,categorie:p.categorie,valeurs:vals,total});
+    }
   });
-  return result;
+  return entries;
 }
 
 function delProd(id) {
   if(!confirm('Retirer ce produit de la liste ?'))return;
-  S.produits=S.produits.filter(x=>x.id!==id); renderProducts();
+  S.produits=S.produits.filter(x=>x.id!==id);
+  delete tarteVariants[id];
+  renderProducts();
 }
 
 function addProduct() {
@@ -593,8 +733,8 @@ async function submitForm() {
   if(!emp){showToast('Sélectionne ton nom','error');return}
 
   // Lire les valeurs directement depuis le DOM
-  const domVals = readValuesFromDOM();
-  const filled  = S.produits.filter(p => domVals[p.id] && domVals[p.id].total > 0);
+  const allEntries = readValuesFromDOM();
+  const filled = allEntries.filter(e => e.total > 0);
 
   if(!filled.length){showToast('Saisis au moins une quantité','error');return}
 
@@ -609,11 +749,11 @@ async function submitForm() {
     employe: emp,
     notes:   document.getElementById('notes').value.trim(),
     colonnes: S.colonnes,
-    produits: filled.map(p=>({
-      nom:      p.nom,
-      categorie:p.categorie,
-      valeurs:  domVals[p.id].valeurs,
-      total:    domVals[p.id].total
+    produits: filled.map(e=>({
+      nom:      e.nom,
+      categorie:e.categorie,
+      valeurs:  e.valeurs,
+      total:    e.total
     }))
   };
 
@@ -626,13 +766,6 @@ async function submitForm() {
 	try {
 		const res = await fetch(url, {method:'POST', body: JSON.stringify(payload)});
 		const data = await res.json();
-		
-		// AJOUTE CES LIGNES DE DEBUG
-		console.log('=== PAYLOAD ENVOYÉ ===');
-		console.log(JSON.stringify(payload, null, 2));
-		console.log('=== RÉPONSE GAS ===');
-		console.log(JSON.stringify(data, null, 2));
-		
 		if(!data.success) throw new Error(data.error||'Erreur inconnue');
 		btn.classList.remove('loading'); btn.disabled=false;
 		showConfirm(payload); showToast('Fiche envoyée !','success');

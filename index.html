@@ -246,6 +246,30 @@ textarea:focus{border-color:var(--or);box-shadow:0 0 0 3px rgba(201,168,76,.1)}
 .logout-btn{padding:7px 13px;background:none;color:var(--gris2);border:1px solid rgba(255,255,255,.07);
   border-radius:7px;font-family:'Courier New',monospace;font-size:11px;cursor:pointer}
 
+/* ── PAIN / BIEN CUIT ── */
+.pain-card{background:var(--noir3);border-radius:10px;border:1px solid rgba(201,168,76,.18);
+  margin-bottom:8px;overflow:hidden}
+.pain-card-header{display:flex;align-items:center;justify-content:space-between;
+  padding:9px 12px 7px;border-bottom:1px solid rgba(255,255,255,.05);
+  background:rgba(201,168,76,.04)}
+.pain-card-name{font-size:14px;color:var(--blanc)}
+.pain-sub{font-size:9px;letter-spacing:1px;text-transform:uppercase;
+  color:rgba(201,168,76,.45);font-family:'Courier New',monospace;margin-top:1px}
+.pain-section{padding:8px 12px 6px;border-top:1px dashed rgba(201,168,76,.1)}
+.pain-section-label{font-size:9px;letter-spacing:1.5px;text-transform:uppercase;
+  font-family:'Courier New',monospace;margin-bottom:6px;padding:2px 7px;
+  border-radius:4px;display:inline-block}
+.pain-section-label.normal{color:rgba(250,248,242,.5);background:rgba(255,255,255,.04)}
+.pain-section-label.bc{color:rgba(201,168,76,.7);background:rgba(201,168,76,.08)}
+.pain-cols{display:grid;grid-template-columns:repeat(auto-fill,minmax(75px,1fr));gap:7px;margin-top:5px}
+/* table */
+.pain-sub-row td{background:rgba(201,168,76,.025)!important;border-top:1px dashed rgba(201,168,76,.08)}
+.pain-sub-row.bccuit td{background:rgba(201,168,76,.055)!important}
+.pain-sublabel{font-size:10px;color:rgba(201,168,76,.5);font-family:'Courier New',monospace;
+  padding-left:18px!important;font-style:italic}
+.pain-group-name-row td{padding:8px 12px 2px!important;background:rgba(201,168,76,.04)!important;
+  border-radius:9px 9px 0 0!important}
+
 .toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(80px);
   background:var(--noir3);color:var(--blanc);padding:10px 17px;border-radius:50px;
   font-size:13px;box-shadow:0 8px 30px rgba(0,0,0,.6);z-index:999;
@@ -415,6 +439,32 @@ let allFiches=[], nextId=1;
 const tarteVariants={}; // { pid: [4,6,...] }
 const PARTS_OPTS=[4,6,8,10,12];
 function isTarte(p){return p.categorie&&p.categorie.toLowerCase().includes('tarte');}
+function isPain(p){return p.categorie&&p.categorie.toLowerCase().includes('pain');}
+
+function updatePainTotal(pid, source) {
+  // Propager la valeur saisie à tous les inputs miroirs (même col + même bc)
+  if (source) {
+    const v = parseInt(source.value) || 0;
+    document.querySelectorAll(`[data-pid="${pid}"][data-col="${source.dataset.col}"][data-bc="${source.dataset.bc}"]`)
+      .forEach(inp => { inp.value = v; });
+  }
+  // Calculer le total : une valeur par colonne par type (normal/bc)
+  let total = 0;
+  S.colonnes.forEach(c => {
+    const enc = encodeURIComponent(c);
+    // Un seul input suffit (tous les miroirs ont la même valeur maintenant)
+    const inN  = document.querySelector(`[data-pid="${pid}"][data-col="${enc}"][data-bc="0"]`);
+    const inBC = document.querySelector(`[data-pid="${pid}"][data-col="${enc}"][data-bc="1"]`);
+    total += (inN  ? (parseInt(inN.value)||0)  : 0);
+    total += (inBC ? (parseInt(inBC.value)||0) : 0);
+  });
+  ['ttotal-pain-','ctotal-pain-'].forEach(pfx=>{
+    const el=document.getElementById(pfx+pid); if(el) el.textContent=total;
+  });
+  ['trow-','crow-'].forEach(pfx=>{
+    const el=document.getElementById(pfx+pid); if(el) el.classList.toggle('has-val',total>0);
+  });
+}
 function initTarteVariants(){
   S.produits.forEach(p=>{if(isTarte(p)&&!tarteVariants[p.id])tarteVariants[p.id]=[4];});
 }
@@ -569,6 +619,31 @@ function renderProducts() {
             <td><button class="delbtn" onclick="removeTarteVariant(${p.id},${parts})" title="Retirer cette taille">−</button></td>
           </tr>`;
         });
+      } else if(isPain(p)){
+        // ── PAIN : groupe avec deux sous-lignes (normale + bien cuit) ──
+        const mkInputs=(bc)=>S.colonnes.map(c=>
+          `<td><input class="col-input" type="number" min="0" value="0"
+            data-pid="${p.id}" data-col="${encodeURIComponent(c)}" data-bc="${bc}"
+            oninput="updatePainTotal(${p.id},this)" onchange="updatePainTotal(${p.id},this)"/></td>`
+        ).join('');
+        html+=`<tr class="pain-group-name-row">
+          <td colspan="${nCols+3}">
+            <div class="tarte-name-wrap">
+              <span class="pname-t">🍞 ${p.nom}</span>
+              <button class="delbtn" onclick="delProd(${p.id})" title="Retirer">✕</button>
+            </div>
+          </td>
+        </tr>
+        <tr class="pain-sub-row" id="trow-${p.id}">
+          <td class="pain-sublabel">Normal</td>
+          ${mkInputs(0)}
+          <td class="total-td" id="ttotal-pain-${p.id}" rowspan="2">0</td>
+          <td rowspan="2"></td>
+        </tr>
+        <tr class="pain-sub-row bccuit">
+          <td class="pain-sublabel" style="color:var(--or)">Bien cuit</td>
+          ${mkInputs(1)}
+        </tr>`;
       } else {
         // Produit normal
         const inputs=S.colonnes.map(c=>
@@ -625,6 +700,38 @@ function renderProducts() {
             </div>
           </div>
           ${variantHtml}
+        </div>`;
+      } else if(isPain(p)){
+        // ── PAIN mobile : carte avec 2 sections Normal / Bien cuit ──
+        const mkCardCols=(bc)=>S.colonnes.map(c=>`
+          <div class="pcard-col">
+            <div class="clabel">${c}</div>
+            <input class="col-input" type="number" min="0" value="0"
+              data-pid="${p.id}" data-col="${encodeURIComponent(c)}" data-bc="${bc}"
+              oninput="updatePainTotal(${p.id},this)" onchange="updatePainTotal(${p.id},this)"/>
+          </div>`).join('');
+        html+=`<div class="pain-card" id="crow-${p.id}">
+          <div class="pain-card-header">
+            <div>
+              <div class="pain-card-name">🍞 ${p.nom}</div>
+              <div class="pain-sub">Pain</div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px">
+              <div>
+                <div style="font-size:9px;letter-spacing:1px;text-transform:uppercase;color:rgba(201,168,76,.5);font-family:'Courier New',monospace;text-align:right">Total</div>
+                <div style="font-size:22px;font-weight:bold;color:var(--or2);line-height:1;text-align:right" id="ctotal-pain-${p.id}">0</div>
+              </div>
+              <button class="delbtn" onclick="delProd(${p.id})">✕</button>
+            </div>
+          </div>
+          <div class="pain-section">
+            <span class="pain-section-label normal">Normal</span>
+            <div class="pain-cols">${mkCardCols(0)}</div>
+          </div>
+          <div class="pain-section">
+            <span class="pain-section-label bc">🔥 Bien cuit</span>
+            <div class="pain-cols">${mkCardCols(1)}</div>
+          </div>
         </div>`;
       } else {
         const cardCols=S.colonnes.map(c=>`
@@ -698,6 +805,24 @@ function readValuesFromDOM() {
         });
         entries.push({nom:`${p.nom} — ${parts} parts`,categorie:p.categorie,valeurs:vals,total});
       });
+    } else if(isPain(p)){
+      // Deux lignes : une pour normal, une pour bien cuit
+      const valsN={};const valsBC={};let totalN=0,totalBC=0;
+      S.colonnes.forEach(c=>{
+        const enc=encodeURIComponent(c);
+        const inputsN=document.querySelectorAll(`[data-pid="${p.id}"][data-col="${enc}"][data-bc="0"]`);
+        const inputsBC=document.querySelectorAll(`[data-pid="${p.id}"][data-col="${enc}"][data-bc="1"]`);
+        let vn=0,vbc=0;
+        inputsN.forEach(inp=>{vn=Math.max(vn,parseInt(inp.value)||0);});
+        inputsBC.forEach(inp=>{vbc=Math.max(vbc,parseInt(inp.value)||0);});
+        valsN[c]=vn; totalN+=vn;
+        valsBC[c]=vbc; totalBC+=vbc;
+      });
+      // N'inclure que les lignes non nulles
+      if(totalN>0) entries.push({nom:p.nom,categorie:p.categorie,valeurs:valsN,total:totalN,painType:'normal'});
+      if(totalBC>0) entries.push({nom:`${p.nom} — Bien cuit`,categorie:p.categorie,valeurs:valsBC,total:totalBC,painType:'bc'});
+      // Si les deux sont à 0, on inclut quand même la ligne normale pour affichage
+      if(totalN===0&&totalBC===0) entries.push({nom:p.nom,categorie:p.categorie,valeurs:valsN,total:0,painType:'normal'});
     } else {
       const vals={};let total=0;
       S.colonnes.forEach(c=>{
@@ -734,6 +859,8 @@ async function submitForm() {
 
   // Lire les valeurs directement depuis le DOM
   const allEntries = readValuesFromDOM();
+  // Pour les pains, readValuesFromDOM n'inclut que les lignes non nulles (+ 1 ligne si tout à 0)
+  // On filtre : on garde seulement ceux avec total > 0
   const filled = allEntries.filter(e => e.total > 0);
 
   if(!filled.length){showToast('Saisis au moins une quantité','error');return}
@@ -781,8 +908,12 @@ function showConfirm(p) {
   document.getElementById('cmeta').textContent=`${p.employe} · ${p.date} à ${p.heure}`;
   const thCols=p.colonnes.map(c=>`<th>${c}</th>`).join('');
   const rows=p.produits.map(prod=>{
-    const vals=p.colonnes.map(c=>`<td class="num">${prod.valeurs[c]||0}</td>`).join('');
-    return `<tr><td>${prod.nom}</td>${vals}<td class="tot">${prod.total}</td></tr>`;
+    const isBc=prod.nom&&prod.nom.toLowerCase().includes('bien cuit');
+    const vals=p.colonnes.map(c=>`<td class="num" style="${isBc?'color:var(--or)':''}">${prod.valeurs[c]||0}</td>`).join('');
+    return `<tr style="${isBc?'background:rgba(201,168,76,.04)':''}">
+      <td style="${isBc?'font-style:italic;color:var(--or);font-size:12px;padding-left:18px':''}">
+        ${isBc?'🔥 ':''}${prod.nom}
+      </td>${vals}<td class="tot">${prod.total}</td></tr>`;
   }).join('');
   document.getElementById('confirm-table-wrap').innerHTML=`
     <div class="confirm-scroll"><table class="confirm-table">
@@ -836,12 +967,15 @@ function renderHistory(fiches) {
   if(!fiches.length){list.innerHTML='<div class="empty">Aucune fiche.</div>';return}
   list.innerHTML=fiches.map(f=>{
     if(!f.produits||!f.produits.length) return '';
-    // Colonnes = toutes les clés sauf 'nom', 'categorie', 'Total'
     const cols=Object.keys(f.produits[0]).filter(k=>k!=='nom'&&k!=='categorie'&&k!=='Total');
     const thCols=cols.map(c=>`<th>${c}</th>`).join('');
     const rows=f.produits.map(p=>{
-      const vals=cols.map(c=>`<td>${p[c]!==undefined?p[c]:0}</td>`).join('');
-      return `<tr><td>${p.nom}</td>${vals}<td class="htotal">${p.Total||0}</td></tr>`;
+      const isBc=p.nom&&p.nom.toLowerCase().includes('bien cuit');
+      const vals=cols.map(c=>`<td style="${isBc?'color:var(--or);':''}"}>${p[c]!==undefined?p[c]:0}</td>`).join('');
+      return `<tr style="${isBc?'background:rgba(201,168,76,.04)':''}">
+        <td style="${isBc?'padding-left:18px;font-style:italic;color:var(--or);font-size:11px':''}">
+          ${isBc?'🔥 ':''} ${p.nom}
+        </td>${vals}<td class="htotal">${p.Total||0}</td></tr>`;
     }).join('');
     return `<div class="hcard">
       <div class="hhead">
